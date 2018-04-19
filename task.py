@@ -29,6 +29,7 @@ class Task():
     def get_reward(self):
         """Uses current pose of sim to return reward."""
         reward = 1.-.3*(abs(self.sim.pose[:3] - self.target_pos)).sum()
+        reward = np.clip(reward, -1.0, 1.0)  # clip the reward between [-1.0, 1.0]
         return reward
 
     def step(self, rotor_speeds):
