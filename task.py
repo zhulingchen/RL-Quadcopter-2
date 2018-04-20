@@ -19,8 +19,8 @@ class Task():
         self.action_repeat = 3
 
         self.state_size = self.action_repeat * 6
-        self.action_low = 0
-        self.action_high = 900
+        self.action_low = 403
+        self.action_high = 405
         self.action_size = 4
 
         # Goal
@@ -28,8 +28,13 @@ class Task():
 
     def get_reward(self):
         """Uses current pose of sim to return reward."""
-        reward = 1.-.3*(abs(self.sim.pose[:3] - self.target_pos)).sum()
-        reward = np.clip(reward, -1.0, 1.0)  # clip the reward between [-1.0, 1.0]
+        # reward = 1. - 0.3*(abs(self.sim.pose[:3] - self.target_pos)).sum()
+        # reward = 1 - 0.5*np.linalg.norm(self.sim.pose[:3]-self.target_pos) + 0.3*self.sim.pose[2]
+        # reward = 0.5*self.sim.pose[2] + self.sim.v[2] - np.linalg.norm(self.sim.pose[:2]) - np.linalg.norm(self.sim.v[:2]) + 0.5
+
+        reward = 1 - min(np.linalg.norm(self.sim.pose[:3] - self.target_pos), 2.0)  # + np.linalg.norm(self.sim.v)
+        # reward = np.tanh(reward)  # normalize reward to [-1, 1]
+
         return reward
 
     def step(self, rotor_speeds):
@@ -38,7 +43,21 @@ class Task():
         pose_all = []
         for _ in range(self.action_repeat):
             done = self.sim.next_timestep(rotor_speeds) # update the sim pose and velocities
-            reward += self.get_reward() 
+            reward += self.get_reward()
+
+            # extra reward processing
+
+            # if self.sim.pose[2] >= self.target_pos[2]:  # agent has crossed the target height
+            #     reward += 50.0  # bonus reward
+            # elif done and self.sim.time < self.sim.runtime:  # penalize crash
+            #     reward -= 20.0  # extra penalty
+
+            if done:
+                if self.sim.time < self.sim.runtime:  # penalize crash
+                    reward -= 1.0  # extra penalty
+                elif np.abs(self.sim.pose[2] - self.target_pos[2]) <= 5:  # bonus for hovering
+                    reward += 10.0  # bonus reward
+
             pose_all.append(self.sim.pose)
         next_state = np.concatenate(pose_all)
         return next_state, reward, done

@@ -4,7 +4,7 @@ import numpy as np
 import copy
 import random
 from collections import namedtuple, deque
-from keras import layers, models, optimizers
+from keras import layers, models, optimizers, regularizers
 from keras import backend as K
 
 class ReplayBuffer:
@@ -55,28 +55,34 @@ class Actor:
         self.action_range = self.action_high - self.action_low
 
         # Initialize any other variables here
+        self.dropout_rate = 0.2
+        self.learning_rate = 1e-4
+        self.build_model(self.dropout_rate, self.learning_rate)
 
-        self.build_model()
-
-    def build_model(self):
+    def build_model(self, dropout_rate=0.5, learning_rate=1e-3):
         """Build an actor (policy) network that maps states -> actions."""
         # Define input layer (states)
         states = layers.Input(shape=(self.state_size,), name='states')
 
         # Add hidden layers
-        net = layers.Dense(units=32, activation='relu')(states)
-        net = layers.Dense(units=64, activation='relu')(net)
-        net = layers.Dense(units=32, activation='relu')(net)
-
         # Try different layer sizes, activations, add batch normalization, regularizers, etc.
+        net = layers.Dense(units=32, activation='relu')(states)
+        # net = layers.BatchNormalization()(net)
+        net = layers.Dropout(dropout_rate)(net)
+
+        net = layers.Dense(units=64, activation='relu')(net)
+        # net = layers.BatchNormalization()(net)
+        net = layers.Dropout(dropout_rate)(net)
+
+        net = layers.Dense(units=32, activation='relu')(net)
+        # net = layers.BatchNormalization()(net)
+        net = layers.Dropout(dropout_rate)(net)
 
         # Add final output layer with sigmoid activation
-        raw_actions = layers.Dense(units=self.action_size, activation='sigmoid',
-            name='raw_actions')(net)
+        raw_actions = layers.Dense(units=self.action_size, activation='sigmoid', name='raw_actions')(net)
 
         # Scale [0, 1] output for each action dimension to proper range
-        actions = layers.Lambda(lambda x: (x * self.action_range) + self.action_low,
-            name='actions')(raw_actions)
+        actions = layers.Lambda(lambda x: (x * self.action_range) + self.action_low, name='actions')(raw_actions)
 
         # Create Keras model
         self.model = models.Model(inputs=states, outputs=actions)
@@ -88,7 +94,7 @@ class Actor:
         # Incorporate any additional losses here (e.g. from regularizers)
 
         # Define optimizer and training function
-        optimizer = optimizers.Adam()
+        optimizer = optimizers.Adam(lr=learning_rate)
         updates_op = optimizer.get_updates(params=self.model.trainable_weights, loss=loss)
         self.train_fn = K.function(
             inputs=[self.model.input, action_gradients, K.learning_phase()],
@@ -111,30 +117,41 @@ class Critic:
         self.action_size = action_size
 
         # Initialize any other variables here
+        self.dropout_rate = 0.2
+        self.learning_rate = 1e-3
+        self.build_model(self.dropout_rate, self.learning_rate)
 
-        self.build_model()
-
-    def build_model(self):
+    def build_model(self, dropout_rate=0.5, learning_rate=1e-3):
         """Build a critic (value) network that maps (state, action) pairs -> Q-values."""
         # Define input layers
         states = layers.Input(shape=(self.state_size,), name='states')
         actions = layers.Input(shape=(self.action_size,), name='actions')
 
         # Add hidden layer(s) for state pathway
+        # Try different layer sizes, activations, add batch normalization, regularizers, etc.
         net_states = layers.Dense(units=32, activation='relu')(states)
+        # net_states = layers.BatchNormalization()(net_states)
+        net_states = layers.Dropout(dropout_rate)(net_states)
+
         net_states = layers.Dense(units=64, activation='relu')(net_states)
+        # net_states = layers.BatchNormalization()(net_states)
 
         # Add hidden layer(s) for action pathway
-        net_actions = layers.Dense(units=32, activation='relu')(actions)
-        net_actions = layers.Dense(units=64, activation='relu')(net_actions)
-
         # Try different layer sizes, activations, add batch normalization, regularizers, etc.
+        net_actions = layers.Dense(units=32, activation='relu')(actions)
+        # net_actions = layers.BatchNormalization()(net_actions)
+        net_actions = layers.Dropout(dropout_rate)(net_actions)
+
+        net_actions = layers.Dense(units=64, activation='relu')(net_actions)
+        # net_actions = layers.BatchNormalization()(net_actions)
 
         # Combine state and action pathways
         net = layers.Add()([net_states, net_actions])
         net = layers.Activation('relu')(net)
 
         # Add more layers to the combined network if needed
+        net = layers.Dropout(dropout_rate)(net)
+        # net = layers.BatchNormalization()(net)
 
         # Add final output layer to prduce action values (Q values)
         Q_values = layers.Dense(units=1, name='q_values')(net)
@@ -143,7 +160,7 @@ class Critic:
         self.model = models.Model(inputs=[states, actions], outputs=Q_values)
 
         # Define optimizer and compile model for training with built-in loss function
-        optimizer = optimizers.Adam()
+        optimizer = optimizers.Adam(lr=learning_rate)
         self.model.compile(optimizer=optimizer, loss='mse')
 
         # Compute action gradients (derivative of Q values w.r.t. to actions)
@@ -178,6 +195,7 @@ class DDPG():
         self.actor_target.model.set_weights(self.actor_local.model.get_weights())
         
         # Score
+        self.score = 0
         self.best_score = -np.inf
         
         # Noise process
@@ -193,7 +211,7 @@ class DDPG():
 
         # Algorithm parameters
         self.gamma = 0.99  # discount factor
-        self.tau = 0.01  # for soft update of target parameters
+        self.tau = 0.001  # for soft update of target parameters
 
     def reset_episode(self):
         self.count = 0
@@ -207,10 +225,7 @@ class DDPG():
         # Save experience / reward
         self.count += 1
         self.total_reward += reward
-        self.score = self.total_reward / float(self.count) if self.count else 0.0
-        if self.score > self.best_score:
-            self.best_score = self.score 
-        
+
         self.memory.add(self.last_state, action, reward, next_state, done)
 
         # Learn, if enough samples are available in memory
@@ -229,6 +244,10 @@ class DDPG():
 
     def learn(self, experiences):
         """Update policy and value parameters using given batch of experience tuples."""
+        self.score = self.total_reward / float(self.count) if self.count else 0.0
+        if self.score > self.best_score:
+            self.best_score = self.score
+
         # Convert experience tuples to separate arrays for each element (states, actions, rewards, etc.)
         states = np.vstack([e.state for e in experiences if e is not None])
         actions = np.array([e.action for e in experiences if e is not None]).astype(np.float32).reshape(-1, self.action_size)
