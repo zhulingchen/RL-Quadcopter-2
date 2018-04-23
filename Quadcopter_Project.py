@@ -7,7 +7,7 @@ from task import Task
 from agents.agent import DDPG
 
 ## TODO: Train your agent here.
-num_episodes = 250
+num_episodes = 1000
 
 # init_pose_height = np.random.uniform(0.5, 1.5)
 init_pose = np.array([0., 0., 1., 0., 0., 0.])

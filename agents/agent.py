@@ -125,7 +125,7 @@ class Critic:
 
         # Initialize any other variables here
         self.dropout_rate = 0.2
-        self.learning_rate = 1e-3
+        self.learning_rate = 5e-4
         self.build_model(self.dropout_rate, self.learning_rate, True)
 
     def build_model(self, dropout_rate=0.5, learning_rate=1e-3, model_plot=False):
@@ -140,7 +140,7 @@ class Critic:
         # net_states = layers.BatchNormalization()(net_states)
         net_states = layers.Dropout(dropout_rate)(net_states)
 
-        net_states = layers.Dense(units=300, activation='relu')(net_states)
+        net_states = layers.Dense(units=300, activation=None)(net_states)
         # net_states = layers.BatchNormalization()(net_states)
 
         # Add hidden layer(s) for action pathway
@@ -149,7 +149,7 @@ class Critic:
         # net_actions = layers.BatchNormalization()(net_actions)
         net_actions = layers.Dropout(dropout_rate)(net_actions)
 
-        net_actions = layers.Dense(units=300, activation='relu')(net_actions)
+        net_actions = layers.Dense(units=300, activation=None)(net_actions)
         # net_actions = layers.BatchNormalization()(net_actions)
 
         # Combine state and action pathways
@@ -157,6 +157,7 @@ class Critic:
         net = layers.Activation('relu')(net)
 
         # Add more layers to the combined network if needed
+        # net = layers.BatchNormalization()(net)
         net = layers.Dropout(dropout_rate)(net)
 
         # Add final output layer to produce action values (Q values)
