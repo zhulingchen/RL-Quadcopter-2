@@ -19,8 +19,8 @@ class Task():
         self.action_repeat = 3
 
         self.state_size = self.action_repeat * 6
-        self.action_low = 403
-        self.action_high = 405
+        self.action_low = 100
+        self.action_high = 900
         self.action_size = 4
 
         # Goal
@@ -29,11 +29,13 @@ class Task():
     def get_reward(self):
         """Uses current pose of sim to return reward."""
         # reward = 1. - 0.3*(abs(self.sim.pose[:3] - self.target_pos)).sum()
+        # reward = 1 - 0.3 * np.linalg.norm(self.sim.pose[:3] - self.target_pos)
         # reward = 1 - 0.5*np.linalg.norm(self.sim.pose[:3]-self.target_pos) + 0.3*self.sim.pose[2]
         # reward = 0.5*self.sim.pose[2] + self.sim.v[2] - np.linalg.norm(self.sim.pose[:2]) - np.linalg.norm(self.sim.v[:2]) + 0.5
 
-        reward = 1 - min(np.linalg.norm(self.sim.pose[:3] - self.target_pos), 2.0)  # + np.linalg.norm(self.sim.v)
-        # reward = np.tanh(reward)  # normalize reward to [-1, 1]
+        reward = 1 - min(0.5 * np.linalg.norm(self.sim.pose[:3] - self.target_pos), 2.0)
+        reward += self.sim.v[2]
+        reward = np.tanh(reward)  # normalize reward to [-1, 1]
 
         return reward
 
@@ -53,10 +55,12 @@ class Task():
             #     reward -= 20.0  # extra penalty
 
             if done:
-                if self.sim.time < self.sim.runtime:  # penalize crash
-                    reward -= 1.0  # extra penalty
-                elif np.abs(self.sim.pose[2] - self.target_pos[2]) <= 5:  # bonus for hovering
-                    reward += 10.0  # bonus reward
+                if self.sim.time < self.sim.runtime:  # penalty for crash
+                    # reward -= 1.0  # extra penalty
+                    reward = -1.0
+                elif np.abs(self.sim.pose[2] - self.target_pos[2]) <= 2:  # bonus for approaching the target
+                    # reward += 10.0  # bonus reward
+                    reward = 10.0
 
             pose_all.append(self.sim.pose)
         next_state = np.concatenate(pose_all)

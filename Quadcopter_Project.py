@@ -7,9 +7,10 @@ from task import Task
 from agents.agent import DDPG
 
 ## TODO: Train your agent here.
-num_episodes = 200
+num_episodes = 250
 
-init_pose = np.array([0., 0., 10., 0., 0., 0.])
+# init_pose_height = np.random.uniform(0.5, 1.5)
+init_pose = np.array([0., 0., 1., 0., 0., 0.])
 init_velocities = np.array([0., 0., 0.])
 init_angle_velocities = np.array([0., 0., 0.])
 target_pos = np.array([0., 0., 10.])

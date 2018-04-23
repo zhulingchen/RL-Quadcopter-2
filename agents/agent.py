@@ -1,11 +1,14 @@
 import os
 os.environ['KERAS_BACKEND'] = 'tensorflow'  # set up tensorflow backend for keras
+# os.environ['CUDA_VISIBLE_DEVICES'] = '-1'  # use CPU instead of GPU
 import numpy as np
 import copy
 import random
 from collections import namedtuple, deque
 from keras import layers, models, optimizers, regularizers
 from keras import backend as K
+from keras.utils import plot_model
+
 
 class ReplayBuffer:
     """Fixed-size buffer to store experience tuples."""
@@ -57,26 +60,26 @@ class Actor:
         # Initialize any other variables here
         self.dropout_rate = 0.2
         self.learning_rate = 1e-4
-        self.build_model(self.dropout_rate, self.learning_rate)
+        self.build_model(self.dropout_rate, self.learning_rate, True)
 
-    def build_model(self, dropout_rate=0.5, learning_rate=1e-3):
+    def build_model(self, dropout_rate=0.5, learning_rate=1e-3, model_plot=False):
         """Build an actor (policy) network that maps states -> actions."""
         # Define input layer (states)
         states = layers.Input(shape=(self.state_size,), name='states')
 
         # Add hidden layers
         # Try different layer sizes, activations, add batch normalization, regularizers, etc.
-        net = layers.Dense(units=32, activation='relu')(states)
+        net = layers.Dense(units=400, activation='relu')(states)
         # net = layers.BatchNormalization()(net)
         net = layers.Dropout(dropout_rate)(net)
 
-        net = layers.Dense(units=64, activation='relu')(net)
+        net = layers.Dense(units=300, activation='relu')(net)
         # net = layers.BatchNormalization()(net)
         net = layers.Dropout(dropout_rate)(net)
 
-        net = layers.Dense(units=32, activation='relu')(net)
+        # net = layers.Dense(units=64, activation='relu')(net)
         # net = layers.BatchNormalization()(net)
-        net = layers.Dropout(dropout_rate)(net)
+        # net = layers.Dropout(dropout_rate)(net)
 
         # Add final output layer with sigmoid activation
         raw_actions = layers.Dense(units=self.action_size, activation='sigmoid', name='raw_actions')(net)
@@ -86,6 +89,10 @@ class Actor:
 
         # Create Keras model
         self.model = models.Model(inputs=states, outputs=actions)
+
+        # model visualization
+        if model_plot:
+            plot_model(self.model, to_file='actor_model.png', show_shapes=True)
 
         # Define loss function using action value (Q value) gradients
         action_gradients = layers.Input(shape=(self.action_size,))
@@ -119,9 +126,9 @@ class Critic:
         # Initialize any other variables here
         self.dropout_rate = 0.2
         self.learning_rate = 1e-3
-        self.build_model(self.dropout_rate, self.learning_rate)
+        self.build_model(self.dropout_rate, self.learning_rate, True)
 
-    def build_model(self, dropout_rate=0.5, learning_rate=1e-3):
+    def build_model(self, dropout_rate=0.5, learning_rate=1e-3, model_plot=False):
         """Build a critic (value) network that maps (state, action) pairs -> Q-values."""
         # Define input layers
         states = layers.Input(shape=(self.state_size,), name='states')
@@ -129,20 +136,20 @@ class Critic:
 
         # Add hidden layer(s) for state pathway
         # Try different layer sizes, activations, add batch normalization, regularizers, etc.
-        net_states = layers.Dense(units=32, activation='relu')(states)
+        net_states = layers.Dense(units=400, activation='relu')(states)
         # net_states = layers.BatchNormalization()(net_states)
         net_states = layers.Dropout(dropout_rate)(net_states)
 
-        net_states = layers.Dense(units=64, activation='relu')(net_states)
+        net_states = layers.Dense(units=300, activation='relu')(net_states)
         # net_states = layers.BatchNormalization()(net_states)
 
         # Add hidden layer(s) for action pathway
         # Try different layer sizes, activations, add batch normalization, regularizers, etc.
-        net_actions = layers.Dense(units=32, activation='relu')(actions)
+        net_actions = layers.Dense(units=400, activation='relu')(actions)
         # net_actions = layers.BatchNormalization()(net_actions)
         net_actions = layers.Dropout(dropout_rate)(net_actions)
 
-        net_actions = layers.Dense(units=64, activation='relu')(net_actions)
+        net_actions = layers.Dense(units=300, activation='relu')(net_actions)
         # net_actions = layers.BatchNormalization()(net_actions)
 
         # Combine state and action pathways
@@ -151,10 +158,9 @@ class Critic:
 
         # Add more layers to the combined network if needed
         net = layers.Dropout(dropout_rate)(net)
-        # net = layers.BatchNormalization()(net)
 
-        # Add final output layer to prduce action values (Q values)
-        Q_values = layers.Dense(units=1, name='q_values')(net)
+        # Add final output layer to produce action values (Q values)
+        Q_values = layers.Dense(units=1, name='q_values', kernel_regularizer=regularizers.l2(0.01))(net)
 
         # Create Keras model
         self.model = models.Model(inputs=[states, actions], outputs=Q_values)
@@ -162,6 +168,10 @@ class Critic:
         # Define optimizer and compile model for training with built-in loss function
         optimizer = optimizers.Adam(lr=learning_rate)
         self.model.compile(optimizer=optimizer, loss='mse')
+
+        # model visualization
+        if model_plot:
+            plot_model(self.model, to_file='critic_model.png', show_shapes=True)
 
         # Compute action gradients (derivative of Q values w.r.t. to actions)
         action_gradients = K.gradients(Q_values, actions)
